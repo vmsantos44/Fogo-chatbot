@@ -5,6 +5,9 @@ Clerk Authentication with CRM Email Verification (Sign-In Only Mode).
 """
 
 import os
+import re
+import hmac
+import hashlib
 import logging
 import json
 import uuid
@@ -41,20 +44,61 @@ ZOHO_CLIENT_ID = os.getenv("ZOHO_CLIENT_ID")
 ZOHO_CLIENT_SECRET = os.getenv("ZOHO_CLIENT_SECRET")
 ZOHO_REFRESH_TOKEN = os.getenv("ZOHO_REFRESH_TOKEN")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise ValueError("JWT_SECRET environment variable is required")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_DAYS = 30
 
-DB_PATH = "/root/fogo-web-chatbot/chat.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "chat.db"))
+LOG_PATH = os.getenv("LOG_PATH", os.path.join(BASE_DIR, "debug.log"))
 
 zoho_token_cache = {"access_token": None, "expires_at": None}
 active_sessions = {}
+webhook_rate_limit = {}  # IP -> (count, timestamp)
+
+def check_rate_limit(ip: str, limit: int = 10, window: int = 60) -> bool:
+
+    """Simple rate limiter. Returns True if request allowed."""
+
+    now = datetime.now()
+
+    if ip in webhook_rate_limit:
+
+        count, start = webhook_rate_limit[ip]
+
+        if (now - start).seconds < window:
+
+            if count >= limit:
+
+                return False
+
+            webhook_rate_limit[ip] = (count + 1, start)
+
+        else:
+
+            webhook_rate_limit[ip] = (1, now)
+
+    else:
+
+        webhook_rate_limit[ip] = (1, now)
+
+    return True
+
+def sanitize_email(email: str) -> str:
+    """Sanitize email for safe use in COQL queries."""
+    if not email:
+        return ""
+    sanitized = re.sub(r'[^a-zA-Z0-9@.\-_+]', '', email)
+    sanitized = sanitized.replace('"', '').replace("'", '')
+    return sanitized.lower()
 
 def log(message: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     msg = f"[{timestamp}] {message}"
     print(msg)
-    with open("/root/fogo-web-chatbot/debug.log", "a") as f:
+    with open(LOG_PATH, "a") as f:
         f.write(msg + "\n")
 
 def debug(message: str):
@@ -144,7 +188,7 @@ async def verify_clerk_token(token: str) -> Optional[dict]:
         return None
     try:
         from jwt import PyJWKClient
-        jwks_url = "https://organic-mayfly-21.clerk.accounts.dev/.well-known/jwks.json"
+        jwks_url = os.getenv("CLERK_JWKS_URL", "https://organic-mayfly-21.clerk.accounts.dev/.well-known/jwks.json")
         jwks_client = PyJWKClient(jwks_url)
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         payload = jwt.decode(token, signing_key.key, algorithms=["RS256"], options={"verify_aud": False})
@@ -190,7 +234,7 @@ async def search_leads_by_email(email: str) -> Optional[dict]:
     access_token = await get_zoho_access_token()
     if not access_token:
         return None
-    query = f'select id, First_Name, Last_Name, Email, Phone, Lead_Status, Language, Training_Status, Stage, Tier_Level, Candidate_Recruitment_Owner from Leads where Email = "{email}" limit 1'
+    query = f'select id, First_Name, Last_Name, Email, Phone, Lead_Status, Language, Training_Status, Stage, Tier_Level, Candidate_Recruitment_Owner from Leads where Email = "{sanitize_email(email)}" limit 1'
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post("https://www.zohoapis.com/crm/v8/coql",
@@ -207,7 +251,7 @@ async def search_contacts_by_email(email: str) -> Optional[dict]:
     access_token = await get_zoho_access_token()
     if not access_token:
         return None
-    query = f'select id, First_Name, Last_Name, Email, Phone from Contacts where Email = "{email}" limit 1'
+    query = f'select id, First_Name, Last_Name, Email, Phone from Contacts where Email = "{sanitize_email(email)}" limit 1'
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post("https://www.zohoapis.com/crm/v8/coql",
@@ -233,7 +277,7 @@ async def get_lead_with_documents(email: str) -> Optional[dict]:
     access_token = await get_zoho_access_token()
     if not access_token:
         return None
-    query = f'select id, First_Name, Last_Name, Email, Lead_Status, Language, Training_Status, Stage, Tier_Level, Candidate_Recruitment_Owner from Leads where Email = "{email}" limit 1'
+    query = f'select id, First_Name, Last_Name, Email, Lead_Status, Language, Training_Status, Stage, Tier_Level, Candidate_Recruitment_Owner from Leads where Email = "{sanitize_email(email)}" limit 1'
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post("https://www.zohoapis.com/crm/v8/coql",
@@ -375,6 +419,15 @@ async def health():
 
 # Zoho CRM Webhook - Auto-invite new leads/contacts to Clerk
 ZOHO_WEBHOOK_SECRET = os.getenv("ZOHO_WEBHOOK_SECRET", "")  # Optional: for signature verification
+import hmac
+import hashlib
+
+def verify_zoho_webhook(request_body: bytes, signature: str, secret: str) -> bool:
+    """Verify Zoho webhook signature."""
+    if not secret or not signature:
+        return False
+    expected = hmac.new(secret.encode(), request_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
 @app.post("/api/zoho-webhook")
 async def zoho_webhook(request: Request):
