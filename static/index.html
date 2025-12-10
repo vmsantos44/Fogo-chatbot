@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alfa Interpreting - Candidate Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Clerk SDK -->
+    <script 
+        async 
+        crossorigin="anonymous" 
+        data-clerk-publishable-key="pk_test_b3JnYW5pYy1tYXlmbHktMjEuY2xlcmsuYWNjb3VudHMuZGV2JA"
+        src="https://organic-mayfly-21.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+        type="text/javascript">
+    </script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-container" id="loginScreen">
+        <div class="login-box">
+            <div class="login-header">
+                <div class="logo">A</div>
+                <h1>Alfa Interpreting</h1>
+                <p>Candidate Portal</p>
+            </div>
+            <div class="login-content">
+                <h2 data-i18n="welcome">Welcome</h2>
+                <p data-i18n="signInPrompt">Sign in to check your application status, ask questions, or get support.</p>
+                
+                <!-- Clerk Sign-In Component Mount Point -->
+                <div id="clerk-sign-in"></div>
+                
+                <p class="login-note" data-i18n="loginNote">Use the email you used to apply or register with Alfa Interpreting.</p>
+                
+                <div class="login-language">
+                    <button class="lang-btn active" data-lang="en">English</button>
+                    <button class="lang-btn" data-lang="es">Español</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Portal (3-column layout) -->
+    <div class="app-container" id="portalScreen" style="display: none;">
+        <!-- Left Sidebar - Status -->
+        <div class="status-sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-logo">A</div>
+                    <div class="brand-text">
+                        <h1>Alfa Interpreting</h1>
+                        <span>Candidate Portal</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="user-compact">
+                <div class="user-avatar-sm" id="sidebarAvatar">?</div>
+                <div class="user-info-sm">
+                    <h2 id="sidebarUserName">Loading...</h2>
+                    <span id="sidebarUserRole">Interpreter Candidate</span>
+                </div>
+            </div>
+
+            <div class="progress-compact">
+                <div class="progress-row">
+                    <span class="progress-label" data-i18n="progress">Progress</span>
+                    <span class="progress-percent" id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="sidebar-content">
+                <div class="section-title" data-i18n="stages">Stages</div>
+                <div class="vertical-timeline" id="verticalTimeline">
+                    <!-- Timeline populated by JS -->
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    <span data-i18n="signOut">Sign Out</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Chat Section -->
+        <div class="chat-section">
+            <div class="chat-header">
+                <div class="chat-title">
+                    <div class="status-dot"></div>
+                    <div>
+                        <h2 data-i18n="chatSupport">Chat Support</h2>
+                        <span data-i18n="typicallyReplies">Typically replies in minutes</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <div class="lang-toggle">
+                        <button class="lang-toggle-btn active" data-lang="en">EN</button>
+                        <button class="lang-toggle-btn" data-lang="es">ES</button>
+                    </div>
+                    <button class="mobile-menu-btn" onclick="toggleMobileSidebar()" title="Menu">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <line x1="3" y1="6" x2="21" y2="6"/>
+                            <line x1="3" y1="18" x2="21" y2="18"/>
+                        </svg>
+                    </button>
+                    <button class="mobile-info-btn" onclick="toggleMobileInfoPanel()" title="Info">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="16" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <!-- Messages will be inserted here -->
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions" id="quickActions" style="display: none;">
+                <button class="quick-action-btn" data-action="status" onclick="handleQuickAction('status')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M9 11l3 3L22 4"/>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </svg>
+                    <span data-i18n="checkStatus">Check Application Status</span>
+                </button>
+                <button class="quick-action-btn" data-action="question" onclick="handleQuickAction('question')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span data-i18n="haveQuestion">I have a question</span>
+                </button>
+                <button class="quick-action-btn" data-action="human" onclick="handleQuickAction('human')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span data-i18n="talkHuman">Talk to a human</span>
+                </button>
+            </div>
+
+            <div class="typing-indicator" id="typingIndicator">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <div class="chat-input">
+                <button type="button" class="input-attach" onclick="newConversation()" title="New conversation">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                </button>
+                <form id="chatForm" style="display: contents;">
+                    <input type="text" class="input-field" id="messageInput" placeholder="Type your message..." data-i18n-placeholder="typeMessage" autocomplete="off">
+                    <button type="submit" class="input-send" id="sendButton">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"/>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Right Panel - Info Panel -->
+        <div class="info-panel" id="infoPanel">
+            <!-- Upcoming Section -->
+            <div class="panel-section">
+                <div class="panel-title" data-i18n="upcoming">Upcoming</div>
+                <div class="upcoming-card" id="upcomingCard" style="display: none;">
+                    <div class="upcoming-label" id="upcomingLabel">Interview Scheduled</div>
+                    <div class="upcoming-title" id="upcomingTitle">--</div>
+                    <div class="upcoming-meta">
+                        <span id="upcomingDate">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                <line x1="16" y1="2" x2="16" y2="6"/>
+                                <line x1="8" y1="2" x2="8" y2="6"/>
+                                <line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                            --
+                        </span>
+                        <span id="upcomingTime">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            --
+                        </span>
+                    </div>
+                    <div class="upcoming-actions">
+                        <a class="btn-sm btn-primary" id="upcomingJoinBtn" href="#" target="_blank" data-i18n="joinMeeting">Join Meeting</a>
+                        <button class="btn-sm btn-ghost" id="upcomingRescheduleBtn" data-i18n="reschedule">Reschedule</button>
+                    </div>
+                </div>
+                <div class="upcoming-empty" id="upcomingEmpty">
+                    <p data-i18n="noUpcoming">No upcoming events</p>
+                </div>
+            </div>
+
+            <!-- Tasks Section -->
+            <div class="panel-section">
+                <div class="panel-title">
+                    <span data-i18n="tasks">Tasks</span>
+                    <span class="count" id="taskCount">0</span>
+                </div>
+                <div class="task-list" id="taskList">
+                    <!-- Tasks populated by JS -->
+                </div>
+            </div>
+
+            <!-- Documents Section -->
+            <div class="panel-section">
+                <div class="panel-title" data-i18n="documents">Documents</div>
+                <div class="doc-list" id="docList">
+                    <!-- Documents populated by JS -->
+                </div>
+            </div>
+
+            <!-- Recruiter Section -->
+            <div class="panel-section">
+                <div class="panel-title" data-i18n="yourRecruiter">Your Recruiter</div>
+                <div class="contact-card" id="recruiterCard">
+                    <div class="contact-avatar" id="recruiterAvatar">--</div>
+                    <div class="contact-info">
+                        <h4 id="recruiterName">--</h4>
+                        <p id="recruiterTitle">Recruitment Coordinator</p>
+                    </div>
+                    <div class="contact-actions">
+                        <a class="contact-btn" id="recruiterEmailBtn" href="#" title="Email">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                                <polyline points="22,6 12,13 2,6"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobilePanels()"></div>
+
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>
